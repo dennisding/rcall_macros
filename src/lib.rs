@@ -195,11 +195,11 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
 
     setup_rpc_id(&mut fun_infos);
 
-    let ident = trait_infos.ident.clone();
+//    let ident = trait_infos.ident.clone();
     let match_expr = gen_match_expr(&fun_infos);
 
     let dispatcher = quote::quote! {
-        async fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: packer::Packet) {
+        async fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: crate::packer::Packet) {
             match rpc_id {
                 #(#match_expr)*
                 _ => {
@@ -235,6 +235,27 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
 pub fn protocol_impl(_input_item: TokenStream, annotated_item: TokenStream) -> TokenStream  {
 
     annotated_item
+}
+
+#[proc_macro_derive(Protocol)]
+pub fn protocol_derive(input: TokenStream) -> TokenStream {
+    let item = syn::parse_macro_input!(input as syn::ItemStruct);
+    let ident = item.ident;
+
+    let code = quote::quote! {
+        impl crate::network::RpcDispatcher for #ident {
+            async fn dispatch_rpc(&mut self, rpc_id: i32, packet: crate::packer::Packet) {
+                self._dispatch_rpc(rpc_id, packet).await;
+            }
+        }
+    };
+    // // 将 Rust 代码解析为语法树以便进行操作
+    // let ast = syn::parse(input).unwrap();
+
+    // // 构建 trait 实现
+    // ast
+    code.into()
+//    TokenStream::new()
 }
 
 // fn main() {
