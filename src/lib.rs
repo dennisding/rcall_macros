@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use proc_macro2;
 
 use syn;
 use quote;
@@ -139,9 +140,49 @@ fn setup_rpc_id(fun_infos: &mut Vec<FunInfo>) {
     }
 }
 
+fn gen_arg_names<'a>(fun_info: &'a FunInfo) -> Vec<&'a syn::Ident> {
+    let mut result = Vec::new();
+    for arg in fun_info.args.iter() {
+        result.push(arg.0);
+    }
+
+    result
+}
+
+fn gen_arg_types<'a>(fun_info: &'a FunInfo) -> Vec<&'a syn::Type> {
+    let mut result = Vec::new();
+    for arg in fun_info.args.iter() {
+        result.push(arg.1);
+    }
+
+    result
+}
+
+fn gen_match_expr(fun_infos: &Vec<FunInfo>) -> Vec<proc_macro2::TokenStream>{
+    let mut match_exprs = Vec::new();
+
+    for fun_info in fun_infos.iter() {
+        let id = fun_info.id;
+        let name = fun_info.name;
+        let arg_names = gen_arg_names(&fun_info);
+        let arg_types = gen_arg_types(&fun_info);
+
+        let tokens = quote::quote!{
+            #id => {
+                if let Some((#(#arg_names),* )) = rcall::unpack!(packet, #(#arg_types),* ) {
+                    self.#name(#(#arg_names),*).await;
+                }
+            }
+        };
+        match_exprs.push(tokens);
+    }
+
+    match_exprs
+}
+
 #[proc_macro_attribute]
 pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenStream {
-    let trait_infos = syn::parse_macro_input!(annotated_item as syn::ItemTrait);
+    let mut trait_infos = syn::parse_macro_input!(annotated_item as syn::ItemTrait);
 
     let mut fun_infos: Vec<FunInfo> = Vec::new();
     for item in trait_infos.items.iter() {
@@ -152,13 +193,48 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
 
     // gen token stream
 
-    // setup_rpc_id(&mut fun_infos);
+    setup_rpc_id(&mut fun_infos);
+
+    let ident = trait_infos.ident.clone();
+    let match_expr = gen_match_expr(&fun_infos);
+
+    let dispatcher = quote::quote! {
+        async fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: packer::Packet) {
+            match rpc_id {
+                #(#match_expr)*
+                _ => {
+
+                }
+            }
+        }
+    }.into();
+
+    let dispatch_item = syn::parse_macro_input!(dispatcher as syn::TraitItem);
+    trait_infos.items.push(dispatch_item);
 
     let expanded = quote::quote! {
         #trait_infos
+
+//        impl<T: Server> crate::network::RpcDispatcher for T {
+        // impl<T: #ident> crate::network::RpcDispatcher for T {
+        //     async fn dispatch_rpc(&mut self, rpc_id: i32, mut packet: packer::Packet) {
+        //         match rpc_id {
+        //             #(#match_expr)*
+        //             _ => {
+
+        //             }
+        //         }
+        //     }
+        // }
     };
 
     expanded.into()
+}
+
+#[proc_macro_attribute]
+pub fn protocol_impl(_input_item: TokenStream, annotated_item: TokenStream) -> TokenStream  {
+
+    annotated_item
 }
 
 // fn main() {
