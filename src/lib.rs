@@ -199,7 +199,7 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
     let match_expr = gen_match_expr(&fun_infos);
 
     let dispatcher = quote::quote! {
-        async fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: crate::packer::Packet) {
+        async fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: rcall::packer::Packet) {
             match rpc_id {
                 #(#match_expr)*
                 _ => {
@@ -243,8 +243,8 @@ pub fn protocol_derive(input: TokenStream) -> TokenStream {
     let ident = item.ident;
 
     let code = quote::quote! {
-        impl crate::network::RpcDispatcher for #ident {
-            async fn dispatch_rpc(&mut self, rpc_id: i32, packet: crate::packer::Packet) {
+        impl rcall::network::RpcDispatcher for #ident {
+            async fn dispatch_rpc(&mut self, rpc_id: i32, packet: rcall::packer::Packet) {
                 self._dispatch_rpc(rpc_id, packet).await;
             }
         }
