@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2;
 
 use syn;
-use quote;
+use quote::{self, ToTokens};
 
 use std::collections::HashSet;
 
@@ -44,17 +44,14 @@ impl<'a> FunInfo<'a> {
 fn parse_rpc_id(item: &syn::TraitItemFn) -> i32 {
     let mut result: i32 = 0;
     for attr in item.attrs.iter() {
-        let _ = attr.parse_nested_meta(|meta| {
-            let expr: syn::Expr = meta.value()?.parse()?;
-            if let syn::Expr::Lit(expr_lit) = expr {
-                if let syn::Lit::Int(lit_int) = expr_lit.lit {
-                    if let Ok(int_value) = lit_int.base10_parse() {
-                        result = int_value;
-                    }
+        if let syn::Meta::List(list_attr) = &attr.meta {
+            let int_result = syn::parse2::<syn::LitInt>(list_attr.tokens.clone());
+            if let Ok(int_expr) = int_result {
+                if let Ok(int_value) = int_expr.base10_parse::<i32>() {
+                    result = int_value;
                 }
             }
-            return Ok(());
-        });
+        }
     }
 
     return result;
@@ -170,7 +167,11 @@ fn gen_match_expr(fun_infos: &Vec<FunInfo>) -> Vec<proc_macro2::TokenStream>{
         let tokens = quote::quote!{
             #id => {
                 if let Some((#(#arg_names),* )) = rcall::unpack!(packet, #(#arg_types),* ) {
+//                    println!("call function: {}", #name);
+                    println!("helloo:{}", stringify!(#name));
                     self.#name(#(#arg_names),*).await;
+                } else {
+                    println!("error in calling rpc: {}:{}", rpc_id, stringify!(#name));
                 }
             }
         };
@@ -203,7 +204,7 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
             match rpc_id {
                 #(#match_expr)*
                 _ => {
-
+                    println!("invalid rpc_id: {}", rpc_id);
                 }
             }
         }
@@ -242,8 +243,11 @@ pub fn protocol_derive(input: TokenStream) -> TokenStream {
     let item = syn::parse_macro_input!(input as syn::ItemStruct);
     let ident = item.ident;
 
+    let generic = item.generics;
+    let (impl_generic, type_generic, where_clause) = generic.split_for_impl();
+
     let code = quote::quote! {
-        impl rcall::network::RpcDispatcher for #ident {
+        impl #impl_generic rcall::network::RpcDispatcher for #ident #type_generic #where_clause {
             async fn dispatch_rpc(&mut self, rpc_id: i32, packet: rcall::packer::Packet) {
                 self._dispatch_rpc(rpc_id, packet).await;
             }
