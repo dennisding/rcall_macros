@@ -16,12 +16,6 @@ use std::collections::HashSet;
 
 #[proc_macro_attribute]
 pub fn rpc(_input_item: TokenStream, annotated_item: TokenStream) -> TokenStream {
-//     let input = syn::parse_macro_input!(input_item as syn::LitInt);
-// //    let function = syn::parse_macro_input!(annotated_item as syn::TraitItemFn);
-//     let expanded = quote::quote! {
-//         #input
-//     };
-
     annotated_item
 }
 
@@ -77,36 +71,6 @@ fn parse_fun_item(item: &syn::TraitItemFn) -> FunInfo {
     let id = parse_rpc_id(item);
     let args = parse_fun_args(item);
     let info = FunInfo::new(&item.sig.ident, id, args);
-
-//     // parse attribute
-//     for attr in item.attrs.iter() {
-// //        attr.par
-//         let _ = attr.parse_nested_meta(|meta| {
-//             let expr: syn::Expr = meta.value()?.parse()?;
-//             if let syn::Expr::Lit(expr_lit) = expr {
-//                 if let syn::Lit::Int(lit_int) = expr_lit.lit {
-//                     println!("hello: {}", lit_int);
-//                 }
-//             }
-//             return Ok(());
-//             // match expr {
-//             //     syn::Expr::Lit(expr_lit) => {
-//             //         match expr_lit.lit {
-//             //             syn::Lit::Int(lit_int) => {
-//             //                 println!("hello: {}", lit_int);
-//             //                 lit_int.base10_parse();
-//             //             }
-//             //             _ => {}
-//             //         }
-//             //     }
-
-//             //     _ => {
-
-//             //     }
-//             // }
-//             // return Ok(());
-//         });
-//     }
 
     return info;
 }
@@ -167,9 +131,7 @@ fn gen_match_expr(fun_infos: &Vec<FunInfo>) -> Vec<proc_macro2::TokenStream>{
         let tokens = quote::quote!{
             #id => {
                 if let Some((#(#arg_names),* )) = rcall::unpack!(packet, #(#arg_types),* ) {
-//                    println!("call function: {}", #name);
-                    println!("helloo:{}", stringify!(#name));
-                    self.#name(#(#arg_names),*).await;
+                    self.#name(#(#arg_names),*);
                 } else {
                     println!("error in calling rpc: {}:{}", rpc_id, stringify!(#name));
                 }
@@ -200,7 +162,7 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
     let match_expr = gen_match_expr(&fun_infos);
 
     let dispatcher = quote::quote! {
-        async fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: rcall::packer::Packet) {
+        fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: rcall::packer::Packet) {
             match rpc_id {
                 #(#match_expr)*
                 _ => {
@@ -215,18 +177,6 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
 
     let expanded = quote::quote! {
         #trait_infos
-
-//        impl<T: Server> crate::network::RpcDispatcher for T {
-        // impl<T: #ident> crate::network::RpcDispatcher for T {
-        //     async fn dispatch_rpc(&mut self, rpc_id: i32, mut packet: packer::Packet) {
-        //         match rpc_id {
-        //             #(#match_expr)*
-        //             _ => {
-
-        //             }
-        //         }
-        //     }
-        // }
     };
 
     expanded.into()
@@ -247,21 +197,19 @@ pub fn protocol_derive(input: TokenStream) -> TokenStream {
     let (impl_generic, type_generic, where_clause) = generic.split_for_impl();
 
     let code = quote::quote! {
-        impl #impl_generic rcall::network::RpcDispatcher for #ident #type_generic #where_clause {
-            async fn dispatch_rpc(&mut self, rpc_id: i32, packet: rcall::packer::Packet) {
-                self._dispatch_rpc(rpc_id, packet).await;
+        impl #impl_generic rcall::RpcDispatcher for #ident #type_generic #where_clause {
+            fn dispatch_rpc(&mut self, mut packet: rcall::Packet) {
+                use rcall::UnpackFrom;
+                if let Some(rpc_id) = <rcall::RpcId>::unpack_from(&mut packet) {
+                    self._dispatch_rpc(rpc_id, packet);
+                }
+                else {
+                    println!("invalid rpc_id!");
+                }
+//                self._dispatch_rpc(rpc_id, packet);
             }
         }
     };
-    // // 将 Rust 代码解析为语法树以便进行操作
-    // let ast = syn::parse(input).unwrap();
 
-    // // 构建 trait 实现
-    // ast
     code.into()
-//    TokenStream::new()
 }
-
-// fn main() {
-//     println!("Hello, world!");
-// }
