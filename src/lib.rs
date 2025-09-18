@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2;
 
 use syn;
-use quote::{self, ToTokens};
+use quote::{self};
 
 use std::collections::HashSet;
 
