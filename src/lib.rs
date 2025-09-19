@@ -143,6 +143,34 @@ fn gen_match_expr(fun_infos: &Vec<FunInfo>) -> Vec<proc_macro2::TokenStream>{
     match_exprs
 }
 
+fn gen_remote_fun(fun_infos: &Vec<FunInfo>) -> Vec<proc_macro2::TokenStream> {
+    let mut remote_funs = Vec::new();
+
+    for fun_info in fun_infos.iter() {
+        let rpc_id = fun_info.id;
+        let name = fun_info.name;
+        let arg_names = gen_arg_names(&fun_info);
+        let arg_types = gen_arg_types(&fun_info);
+
+    // fn hello_from_server(&mut self, msg: String) {
+    //     let rpc_id: rcall::RpcId = 1;
+    //     let packet = rcall::pack!(rpc_id, msg);
+    //     self.sender.send(packet);
+    // }
+
+        let pack_fun = quote::quote! {
+            pub fn #name(&mut self, #(#arg_names: #arg_types),*) {
+                let rpc_id: rcall::RpcId = #rpc_id;
+                let packet = rcall::pack!(rpc_id, #(#arg_names),*);
+                self.sender.send(packet);
+            }
+        };
+        remote_funs.push(pack_fun);
+    }
+
+    remote_funs
+}
+
 #[proc_macro_attribute]
 pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenStream {
     let mut trait_infos = syn::parse_macro_input!(annotated_item as syn::ItemTrait);
@@ -159,7 +187,11 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
     setup_rpc_id(&mut fun_infos);
 
 //    let ident = trait_infos.ident.clone();
+    let ident = trait_infos.ident.clone();
+    // xxx_Remote
+    let remote_ident = syn::Ident::new(&format!("{}_Remote", ident), proc_macro2::Span::call_site()); // xxx_Remote
     let match_expr = gen_match_expr(&fun_infos);
+    let remote_fun = gen_remote_fun(&fun_infos);
 
     let dispatcher = quote::quote! {
         fn _dispatch_rpc(&mut self, rpc_id: i32, mut packet: rcall::packer::Packet) {
@@ -177,6 +209,21 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
 
     let expanded = quote::quote! {
         #trait_infos
+
+        pub struct #remote_ident<T: rcall::Sender> {
+            sender: T
+        }
+
+        impl<T: rcall::Sender> #remote_ident<T> {
+            pub fn new(sender: T) -> Self {
+                #remote_ident {
+                    sender
+                }
+            }
+
+            // expand remote fun
+            #(#remote_fun)*
+        }
     };
 
     expanded.into()
@@ -188,8 +235,8 @@ pub fn protocol_impl(_input_item: TokenStream, annotated_item: TokenStream) -> T
     annotated_item
 }
 
-#[proc_macro_derive(Protocol)]
-pub fn protocol_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Dispatcher)]
+pub fn services_derive(input: TokenStream) -> TokenStream {
     let item = syn::parse_macro_input!(input as syn::ItemStruct);
     let ident = item.ident;
 
@@ -212,4 +259,32 @@ pub fn protocol_derive(input: TokenStream) -> TokenStream {
     };
 
     code.into()
+}
+
+// protocols::ImplInServer_Remote<rcall::ClientSender>;
+#[proc_macro]
+pub fn client_to_remote_type(input: TokenStream) -> TokenStream {
+    let code_string = input.to_string() + "_Remote<rcall::ClientSender>";
+    let token_stream: proc_macro2::TokenStream = syn::parse_str(&code_string).expect("parse_error");
+
+    let tokens = quote::quote! {
+        #token_stream
+    };
+
+    tokens.into()
+}
+
+/// generate a server remote type
+/// type Remote = rcall::server_to_remote_type(ImplInClientProtocol)
+/// let remote = Remote::new(sender)
+#[proc_macro]
+pub fn server_to_remote_type(input: TokenStream) -> TokenStream {
+    let code_string = input.to_string() + "_Remote<rcall::ServerSender>";
+    let token_stream: proc_macro2::TokenStream = syn::parse_str(&code_string).expect("parse_error");
+
+    let tokens = quote::quote! {
+        #token_stream
+    };
+
+    tokens.into()
 }
