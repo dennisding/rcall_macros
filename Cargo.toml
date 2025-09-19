@@ -2,6 +2,11 @@
 name = "rcall_macro"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+keywords = ["rpc", "rcall", "echo", "services", "server"]
+description = "a rpc framework writed in rust macro"
+repository = "https://github.com/dennisding/rcall_macros"
+readme = "README.md"
 
 [lib]
 proc-macro = true

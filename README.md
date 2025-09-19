@@ -1,2 +1,3 @@
 # rcall-macros
-rpc macros
+
+macros used by rcall crate.
