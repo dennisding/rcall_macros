@@ -221,6 +221,10 @@ pub fn protocol(_input_item: TokenStream, annotated_item: TokenStream) -> TokenS
                 }
             }
 
+            pub fn close(&mut self) {
+                self.sender.close();
+            }
+
             // expand remote fun
             #(#remote_fun)*
         }
