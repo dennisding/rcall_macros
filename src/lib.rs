@@ -48,6 +48,12 @@ fn parse_rpc_id(item: &syn::TraitItemFn) -> i32 {
         }
     }
 
+    if result != 0 {
+        if result < 10 {
+            panic!("invalid rpc_id: {}", result);
+        }
+    }
+
     return result;
 }
 
